@@ -1,0 +1,353 @@
+---
+title: "Anlyze Movies"
+author: "Rama"
+date: "2022-11-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Movies Analyze
+
+analisis ini digunakan sebagai personal project untuk mengetahui trend - trend yang ada di dataset movies, data set ini di peroleh dari (https://www.kaggle.com/datasets/akshaypawar7/millions-of-movies)
+
+
+## Prepare
+```{r echo=TRUE, results='hide', message=FALSE, warning=FALSE, paged.print=FALSE}
+
+library(dplyr)
+library(janitor)
+library(tidyverse)
+library(ggplot2) 
+library(lubridate)
+library(tidyr)
+library(data.table)
+library(scales)
+library(grid)
+library(gridExtra)
+library(gghighlight)
+```
+Library yang dibutuhkan untuk membantu dalam analisis
+
+
+### Import File
+
+```{r}
+movies <- read.csv("movies.csv", na.strings = c('')) %>% clean_names()
+glimpse(movies)
+```
+
+
+
+## Proses
+
+
+
+```{r}
+movies$release_date <- ymd(movies$release_date)
+```
+mengubah tipe data menjadi date menggunakan library lubridate
+
+
+
+```{r}
+unique(movies$status)
+```
+melihat apa saja yang ada di kolom status menggunakan unique
+
+
+
+### Filter Data by "Year = 2000"  and "Status == Released"
+```{r}
+movies <- movies %>% 
+  select(-c(keywords, credits, poster_path, backdrop_path)) %>% 
+  mutate(year = year(release_date))%>% 
+  filter(year>=2000, status=='Released') 
+
+movies$popularity <- as.numeric(gsub(".", "", movies$popularity, fixed=TRUE)) 
+
+ 
+movies <- subset(movies, id!="168626")#data not relevance
+nrow(movies)
+
+```
+
+
+### Checking Duplicate Data
+
+```{r}
+sum(duplicated(movies$id))
+```
+### Removing Duplicate Data by "id"
+
+```{r}
+movies <- movies %>% distinct(id, .keep_all=TRUE)
+nrow(movies)
+
+```
+setelah data duplikat di hapus terdapat 375036 baris
+
+
+
+### Split Genre by "-"
+
+```{r}
+movies_genre <- as.data.frame(movies$genres, stringsAsFactors = FALSE)
+movies_genre2 <- as.data.frame(tstrsplit(movies_genre[,1], '[-]', type.convert=TRUE), 
+                                    stringsAsFactors=FALSE)
+colnames (movies_genre2) <- c("genre1", "genre2")
+
+movies_genre <-  movies_genre2 %>% select(c("genre1", "genre2"))
+
+movies <- cbind (movies, movies_genre) 
+
+
+str(movies$genre1)
+str( movies$genre2)
+```
+
+
+
+## Analyze
+
+
+
+
+
+### Movies by Genre 1 & Genre 2
+
+```{r}
+genre1 <-  
+  movies %>% 
+  select(genre1) %>% 
+  drop_na() %>% 
+  group_by(genre1) %>% 
+  summarise (total = n()) %>% 
+  arrange(desc(genre1)) %>% 
+  ggplot(aes(x = reorder(genre1,total), y=total, fill = total))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  scale_fill_gradient2(mid = "purple", high = "black")+
+  labs(x = "Genres",
+       y = " Total",
+       title = "Movie by Genre 1")+
+  theme_minimal()+
+  theme(legend.position = "none")
+
+genre2 <- 
+  movies_genre %>% select(genre2) %>% 
+  drop_na() %>% 
+  group_by(genre2) %>% 
+  summarise (total = n()) %>% 
+  ggplot(aes(x = reorder(genre2,total), y=total, fill = total))+
+  geom_bar(stat='identity')+
+  scale_fill_gradient2(mid = "purple", high = "black")+
+  coord_flip()+
+  labs(x = "Genres",
+       y = " Total",
+       title = "Movie by Genre 2")+
+  theme_minimal()+theme(legend.position = "none")
+
+grid.arrange(genre1, genre2, ncol=2)
+```
+
+
+### Released Movies by Genre, Year
+
+```{r message=FALSE, warning=FALSE}
+movies %>%
+  drop_na() %>% 
+  group_by(year, genre1) %>% 
+  summarise(total = n()) %>% 
+  ggplot(aes(year, total))+
+  geom_line(aes(color = genre1), linewidth = 1.5)+
+  labs(x = "Year",
+       y = "Total Movies",
+       title = "Released Movies By Genre 1 and >=30 Movies In a Year")+
+  theme_minimal()+
+  gghighlight(total>=30, label_key = genre1)
+```
+
+```{r message=FALSE, warning=FALSE}
+movies %>%
+  drop_na() %>% 
+  group_by(year, genre2) %>% 
+  summarise(total = n()) %>% 
+  ggplot(aes(year, total))+
+  geom_line(aes(color = genre2), linewidth = 1.5)+
+  labs(x = "Year",
+       y = "Total Movies",
+       title = "Released Movies By Genre 2 and >=30 Movies In a Year")+
+  theme_minimal()+
+  gghighlight(total>=30, label_key = genre2)
+
+```
+
+
+
+
+### vote_average by genre
+
+```{r}
+vote_genre <- movies %>% 
+  drop_na() %>% 
+  ggplot(aes(genre1, year, fill=vote_average))+
+  geom_tile()+
+  coord_flip()+
+  scale_fill_gradient2(mid ="purple", high = "black")+
+  labs ( x = "Genre 1",
+         y = "Year",
+         title = "Vote Average by Genre 1")+
+  theme_minimal()
+  
+vote_genre2 <- movies %>% 
+  drop_na() %>% 
+  ggplot(aes(genre2, year, fill=vote_average))+
+  geom_tile()+
+  coord_flip()+
+  scale_fill_gradient2(mid ="purple", high = "black")+
+  labs ( x = "Genre 2",
+         y = "Year",
+         title = "Vote Average by Genre 2")+
+  theme_minimal()
+
+grid.arrange(vote_genre+theme(legend.position = 'hidden'), vote_genre2+
+               theme(legend.position = 'top'), ncol=2)
+
+```
+
+### Overview Movies by genre1 "Documentary" with wordcloud
+
+
+karena movies berdasarkan genre1 yang terbanyak adalah "Documentary" jadi pengambilan data berdasarkan genre1 "Documentary" menggunakan filter
+
+```{r}
+library(tidytext)
+library(textclean)
+
+
+documentary <- movies %>%
+  select (genre1, overview) %>% 
+  filter (genre1 == "Documentary") %>% 
+  drop_NA()
+
+overviews <- documentary$overview
+
+
+# cleaning
+overviews <- overviews %>% 
+  str_to_lower() %>% #Change words to lower case
+  replace_contraction() %>%  #Replace contractions with both words (ex : i'm = i am)
+  replace_word_elongation() %>%   #Replace word elongations with shortened form (ex : filmmm = film) 
+  strip() #Remove all non word characters
+
+
+#tokenize & remove stopwords
+documentary <- enframe(overviews, value = "word", name=NULL) %>% #vector to data frame
+  unnest_tokens(word, word) %>% #changing 1 word to 1 coloumn
+  count(word, sort = T) %>% #counting word sorting by desc
+  anti_join(stop_words) #anti join stop words (a, is, of, the..)
+
+#creating wordcloud2 viz
+
+library(wordcloud2)
+fil_doc <- documentary %>% 
+  arrange(desc(n)) %>% 
+  slice(1:200) #sorting top 200 words
+  
+wordcloud2(fil_doc, size=.6, color = 'random-light', backgroundColor = "black", fontWeight = 'bold', shape = 'pentagon')
+
+
+```
+
+
+
+### Top 10 movies by popularity
+
+```{r}
+
+movies %>% select(title, popularity) %>%
+  arrange(desc(popularity)) %>% 
+  slice(1:10) %>% 
+  ggplot(aes(reorder(title,popularity),popularity, fill=popularity))+
+  geom_bar(stat='identity')+
+  coord_flip()+
+  theme_minimal()+
+  labs (x= "Title",
+        y= "Popularity",
+        title = "TOP 10 Movies by Popularity")+theme(legend.position = "none")+
+  scale_fill_gradient2(mid = "purple", high = "black")
+```
+```{r}
+movies %>% select(title, revenue) %>%
+  arrange(desc(revenue)) %>% 
+  slice(1:10) %>% 
+  ggplot(aes(reorder(title,revenue), revenue, fill = revenue))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  labs(x = "Title",
+       y = "Revenue $",
+       title = "Top 10 Movies by Revenue")+
+    scale_fill_gradient2(mid = "purple", high = "black")
+
+```
+```{r}
+
+
+movies %>% select(title, budget) %>%
+  arrange(desc(budget)) %>% 
+  slice(1:10) %>% 
+  ggplot(aes(reorder(title,budget), budget, fill = budget))+
+  geom_bar(stat="identity")+
+  coord_flip()+
+  labs(x = "Title",
+       y = "Budget $", 
+       title = "TOP 10 movies by Budget")+
+    scale_fill_gradient2(mid = "purple", high = "black")
+
+```
+```{r}
+movies %>% group_by(original_language) %>% 
+  summarise(total = n()) %>%
+  arrange(desc(total)) %>% 
+  slice(1:10) %>%  
+  ggplot(aes(reorder(original_language,total), total, fill=total))+
+  geom_bar(stat = 'identity')+
+  coord_flip()+
+  scale_fill_gradient2(mid = muted("purple"), high = "black")+
+  labs(x= "Original Language",
+       y= "Total",
+       title = "TOP 10 movies by original language")+theme_minimal()
+
+```
+
+
+
+### Correlation between Revenue, Budget, Popularity, Vote_average, Runtime
+
+```{r warning=FALSE}
+cor_data <- movies %>% select(revenue, budget, popularity, vote_average, runtime) %>% 
+  filter(revenue>0, budget>0) %>% drop_na(runtime)
+
+panel.cor <- function(x, y, digits = 2, prefix = "", cex.cor, ...) {
+  usr <- par("usr")
+  on.exit(par(usr))
+  par(usr = c(0, 1, 0, 1))
+  Cor <- abs(cor(x, y)) # Remove abs function if desired
+  txt <- paste0(prefix, format(c(Cor, 0.123456789), digits = digits)[1])
+  if(missing(cex.cor)) {
+    cex.cor <- 0.4 / strwidth(txt)
+  }
+  text(0.5, 0.5, txt,
+       cex = 1 + cex.cor * Cor) # Resize the text by level of correlation
+}
+
+# Plotting the correlation matrix
+pairs(cor_data,
+      upper.panel = panel.cor,    # Correlation panel
+      lower.panel = panel.smooth) # Smoothed regression lines
+```
+
