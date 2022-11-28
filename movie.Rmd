@@ -60,7 +60,7 @@ melihat apa saja yang ada di kolom status menggunakan unique
 
 
 
-### Filter Data by "Year = 2000"  and "Status == Released"
+### Filter Data by "Year >= 2000"  and "Status == Released"
 ```{r}
 movies <- movies %>% 
   select(-c(keywords, credits, poster_path, backdrop_path)) %>% 
