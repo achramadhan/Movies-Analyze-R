@@ -1,5 +1,5 @@
 ---
-title: "Anlyze Movies"
+title: "Analyze Movies"
 author: "Rama"
 date: "2022-11-25"
 output: html_document
